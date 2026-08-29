@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -20,20 +20,23 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Generate Gradle Wrapper
         run: gradle wrapper
 
-      - name: Make Gradle Wrapper executable
-        run: chmod +x gradlew
+      - name: Verify Gradle Wrapper
+        run: ls -la gradlew gradlew.bat
 
-      - name: Build APK
+      - name: Make Gradle Wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build Debug APK
         run: ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Ahl-al-Quran-APK
-          path: '**/build/outputs/apk/**/*.apk'
+          path: app/build/outputs/apk/debug/app-debug.apk
