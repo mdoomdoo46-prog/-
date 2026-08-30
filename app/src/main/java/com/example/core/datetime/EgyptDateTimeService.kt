@@ -20,9 +20,9 @@ import java.util.Locale
 object EgyptDateTimeService {
     val CAIRO_ZONE_ID: ZoneId = ZoneId.of("Africa/Cairo")
     val DATE_KEY_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
-    val TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("hh:mm a", Locale("ar"))
-    val FULL_DATE_FORMATTER_AR: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE، d MMMM yyyy", Locale("ar"))
-    val SHORT_DATE_FORMATTER_AR: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM", Locale("ar"))
+    val TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("hh:mm a", Locale.forLanguageTag("ar"))
+    val FULL_DATE_FORMATTER_AR: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE، d MMMM yyyy", Locale.forLanguageTag("ar"))
+    val SHORT_DATE_FORMATTER_AR: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("ar"))
 
     /**
      * Gets the current ZonedDateTime in Africa/Cairo.

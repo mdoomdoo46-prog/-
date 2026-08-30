@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -118,7 +119,7 @@ fun HomeScreen(
                 SectionHeader(
                     title = "عباداتك اليومية",
                     subtitle = "حافظ على وردك والسنن الراتبة",
-                    icon = Icons.Default.MenuBook
+                    icon = Icons.AutoMirrored.Filled.MenuBook
                 )
             }
 
@@ -572,7 +573,7 @@ fun NextStepCard(suggestion: String) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Default.DirectionsRun,
+                imageVector = Icons.AutoMirrored.Filled.DirectionsRun,
                 contentDescription = "Next step",
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp)
@@ -626,7 +627,7 @@ fun HabitCardItem(
                 modifier = Modifier.weight(1f)
             ) {
                 val icon = when (habit.habitKey) {
-                    "quran_wird" -> Icons.Default.MenuBook
+                    "quran_wird" -> Icons.AutoMirrored.Filled.MenuBook
                     "duha_prayer" -> Icons.Default.WbSunny
                     "witr_prayer" -> Icons.Default.Star
                     "sleep_azkar" -> Icons.Default.NightlightRound
