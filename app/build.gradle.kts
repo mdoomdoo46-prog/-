@@ -23,20 +23,42 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
+  val envKeystoreFile = System.getenv("KEYSTORE_FILE")
+  val envKeystorePassword = System.getenv("KEYSTORE_PASSWORD")
+  val envKeyAlias = System.getenv("KEY_ALIAS")
+  val envKeyPassword = System.getenv("KEY_PASSWORD")
+
+  val hasReleaseSigning = !envKeystoreFile.isNullOrBlank() &&
+      file(envKeystoreFile).exists() &&
+      !envKeystorePassword.isNullOrBlank() &&
+      !envKeyAlias.isNullOrBlank() &&
+      !envKeyPassword.isNullOrBlank()
+
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+      if (hasReleaseSigning) {
+        storeFile = file(envKeystoreFile!!)
+        storePassword = envKeystorePassword
+        keyAlias = envKeyAlias
+        keyPassword = envKeyPassword
+      } else {
+        val runningReleaseTask = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+        if (runningReleaseTask) {
+          throw org.gradle.api.GradleException(
+            "❌ [Release Signing Error]: Missing Release signing secrets or keystore file!\n" +
+            "Please ensure KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD environment variables are set and KEYSTORE_FILE exists."
+          )
+        }
+      }
     }
   }
 
   buildTypes {
     release {
-      isCrunchPngs = false
       isMinifyEnabled = false
+      isShrinkResources = false
+      isDebuggable = false
+      isCrunchPngs = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
