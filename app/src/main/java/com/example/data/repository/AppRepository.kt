@@ -19,86 +19,79 @@ class AppRepository(private val db: AppDatabase) {
     val reflectionDao = db.reflectionDao()
     val weeklyReportDao = db.weeklyReportDao()
     val userSettingsDao = db.userSettingsDao()
+    val dayRecordDao = db.dayRecordDao()
 
     /**
-     * Initializes all records for today if not already initialized.
+     * Initializes all records for the given day if not already initialized.
+     * Guaranteed to be idempotent and never delete or reset existing records.
      */
     suspend fun ensureDayInitialized(dayKey: String, prayerTimes: DailyPrayerTimes) {
-        // 1. Prayers initialization
-        val existingPrayers = prayerDao.getPrayersForDaySync(dayKey)
-        if (existingPrayers.isEmpty()) {
-            val defaultPrayers = listOf(
-                PrayerRecordEntity(
-                    id = "${dayKey}_FAJR",
-                    dayKey = dayKey,
-                    prayer = PrayerType.FAJR.name,
-                    scheduledTime = prayerTimes.fajr,
-                    status = PrayerStatus.UNRECORDED.name
-                ),
-                PrayerRecordEntity(
-                    id = "${dayKey}_DHUHR",
-                    dayKey = dayKey,
-                    prayer = PrayerType.DHUHR.name,
-                    scheduledTime = prayerTimes.dhuhr,
-                    status = PrayerStatus.UNRECORDED.name
-                ),
-                PrayerRecordEntity(
-                    id = "${dayKey}_ASR",
-                    dayKey = dayKey,
-                    prayer = PrayerType.ASR.name,
-                    scheduledTime = prayerTimes.asr,
-                    status = PrayerStatus.UNRECORDED.name
-                ),
-                PrayerRecordEntity(
-                    id = "${dayKey}_MAGHRIB",
-                    dayKey = dayKey,
-                    prayer = PrayerType.MAGHRIB.name,
-                    scheduledTime = prayerTimes.maghrib,
-                    status = PrayerStatus.UNRECORDED.name
-                ),
-                PrayerRecordEntity(
-                    id = "${dayKey}_ISHA",
-                    dayKey = dayKey,
-                    prayer = PrayerType.ISHA.name,
-                    scheduledTime = prayerTimes.isha,
-                    status = PrayerStatus.UNRECORDED.name
-                )
+        // 0. Ensure DayRecord exists
+        dayRecordDao.insertIfAbsent(
+            DayRecordEntity(
+                dayKey = dayKey,
+                isFinalized = false,
+                createdAt = System.currentTimeMillis()
             )
-            prayerDao.insertAll(defaultPrayers)
+        )
+
+        // 1. Prayers initialization - only insert missing
+        val existingPrayers = prayerDao.getPrayersForDaySync(dayKey)
+        val existingPrayerKeys = existingPrayers.map { it.prayer }.toSet()
+        val defaultPrayers = listOf(
+            PrayerType.FAJR to prayerTimes.fajr,
+            PrayerType.DHUHR to prayerTimes.dhuhr,
+            PrayerType.ASR to prayerTimes.asr,
+            PrayerType.MAGHRIB to prayerTimes.maghrib,
+            PrayerType.ISHA to prayerTimes.isha
+        )
+        val missingPrayers = defaultPrayers.filter { it.first.name !in existingPrayerKeys }.map { (type, time) ->
+            PrayerRecordEntity(
+                id = "${dayKey}_${type.name}",
+                dayKey = dayKey,
+                prayer = type.name,
+                scheduledTime = time,
+                status = PrayerStatus.UNRECORDED.name
+            )
+        }
+        if (missingPrayers.isNotEmpty()) {
+            prayerDao.insertAll(missingPrayers)
         }
 
-        // 2. Daily Habits initialization
+        // 2. Daily Habits initialization - only insert missing
         val existingHabits = habitDao.getHabitsForDaySync(dayKey)
-        if (existingHabits.isEmpty()) {
-            val habits = DefaultHabits.ALL_DAILY_HABITS.map { def ->
-                HabitRecordEntity(
-                    id = "${dayKey}_${def.key}",
-                    dayKey = dayKey,
-                    habitKey = def.key,
-                    titleArabic = def.titleArabic,
-                    isCompleted = false,
-                    currentValue = 0,
-                    targetValue = def.defaultTarget,
-                    unitArabic = def.unitArabic
-                )
-            }
-            habitDao.insertAll(habits)
+        val existingHabitKeys = existingHabits.map { it.habitKey }.toSet()
+        val missingHabits = DefaultHabits.ALL_DAILY_HABITS.filter { it.key !in existingHabitKeys }.map { def ->
+            HabitRecordEntity(
+                id = "${dayKey}_${def.key}",
+                dayKey = dayKey,
+                habitKey = def.key,
+                titleArabic = def.titleArabic,
+                isCompleted = false,
+                currentValue = 0,
+                targetValue = def.defaultTarget,
+                unitArabic = def.unitArabic
+            )
+        }
+        if (missingHabits.isNotEmpty()) {
+            habitDao.insertAll(missingHabits)
         }
 
-        // 3. Counters initialization
+        // 3. Counters initialization - only insert missing
         val existingCounters = counterDao.getCountersForDaySync(dayKey)
-        if (existingCounters.isEmpty()) {
-            val counters = DefaultHabits.ALL_COUNTERS.map { def ->
-                CounterRecordEntity(
-                    id = "${dayKey}_${def.key}",
-                    dayKey = dayKey,
-                    counterKey = def.key,
-                    titleArabic = def.titleArabic,
-                    count = 0,
-                    target = def.defaultTarget
-                )
-            }
-            counterDao.insertAll(counters)
+        val existingCounterKeys = existingCounters.map { it.counterKey }.toSet()
+        val missingCounters = DefaultHabits.ALL_COUNTERS.filter { it.key !in existingCounterKeys }.map { def ->
+            CounterRecordEntity(
+                id = "${dayKey}_${def.key}",
+                dayKey = dayKey,
+                counterKey = def.key,
+                titleArabic = def.titleArabic,
+                count = 0,
+                target = def.defaultTarget
+            )
+        }
+        if (missingCounters.isNotEmpty()) {
+            counterDao.insertAll(missingCounters)
         }
 
         // Update settings lastActiveDayKey
@@ -106,6 +99,117 @@ class AppRepository(private val db: AppDatabase) {
         if (settings != null) {
             userSettingsDao.saveSettings(settings.copy(lastActiveDayKey = dayKey))
         }
+    }
+
+    // DayRecord Operations
+    fun getDayRecordFlow(dayKey: String): Flow<DayRecordEntity?> = dayRecordDao.getDayRecordFlow(dayKey)
+    suspend fun getDayRecordSync(dayKey: String): DayRecordEntity? = dayRecordDao.getDayRecordSync(dayKey)
+
+    data class PreviousDayReviewState(
+        val dayKey: String,
+        val dateFormattedArabic: String,
+        val unrecordedPrayers: List<PrayerRecordEntity>,
+        val incompleteHabits: List<HabitRecordEntity>,
+        val needsReview: Boolean
+    )
+
+    suspend fun getPreviousDayReviewState(todayKey: String): PreviousDayReviewState? {
+        val todayDate = try {
+            EgyptDateTimeService.parseDayKey(todayKey)
+        } catch (e: Exception) {
+            return null
+        }
+        val yesterdayDate = todayDate.minusDays(1)
+        val yesterdayKey = EgyptDateTimeService.toDayKey(yesterdayDate)
+
+        val dayRecord = dayRecordDao.getDayRecordSync(yesterdayKey)
+        val yesterdayPrayers = prayerDao.getPrayersForDaySync(yesterdayKey)
+        val yesterdayHabits = habitDao.getHabitsForDaySync(yesterdayKey)
+
+        // If yesterday has no records in DB at all (fresh install today), no review needed
+        if (dayRecord == null && yesterdayPrayers.isEmpty() && yesterdayHabits.isEmpty()) {
+            return null
+        }
+
+        // If yesterday is already marked finalized, no review needed
+        if (dayRecord?.isFinalized == true) {
+            return null
+        }
+
+        val unrecordedPrayers = yesterdayPrayers.filter { it.status == PrayerStatus.UNRECORDED.name }
+        val incompleteHabits = yesterdayHabits.filter { !it.isCompleted }
+
+        val needsReview = unrecordedPrayers.isNotEmpty() || incompleteHabits.isNotEmpty()
+        if (!needsReview) {
+            // Automatically mark finalized if everything was already recorded
+            dayRecordDao.insertOrUpdate(
+                DayRecordEntity(
+                    dayKey = yesterdayKey,
+                    isFinalized = true,
+                    finalizedAt = System.currentTimeMillis()
+                )
+            )
+            return null
+        }
+
+        val arabicDateStr = EgyptDateTimeService.formatArabicFullDate(yesterdayKey)
+        return PreviousDayReviewState(
+            dayKey = yesterdayKey,
+            dateFormattedArabic = arabicDateStr,
+            unrecordedPrayers = unrecordedPrayers,
+            incompleteHabits = incompleteHabits,
+            needsReview = true
+        )
+    }
+
+    suspend fun finalizeDay(
+        dayKey: String,
+        prayerUpdates: Map<String, PrayerStatus> = emptyMap(),
+        habitUpdates: Map<String, Boolean> = emptyMap()
+    ) {
+        // Apply prayer updates
+        val existingPrayers = prayerDao.getPrayersForDaySync(dayKey)
+        for (prayer in existingPrayers) {
+            val updatedStatus = prayerUpdates[prayer.prayer]
+            if (updatedStatus != null) {
+                prayerDao.insertOrUpdate(
+                    prayer.copy(
+                        status = updatedStatus.name,
+                        recordedAt = System.currentTimeMillis()
+                    )
+                )
+            } else if (prayer.status == PrayerStatus.UNRECORDED.name) {
+                prayerDao.insertOrUpdate(
+                    prayer.copy(
+                        status = PrayerStatus.MISSED.name,
+                        reason = "لم تسجل في وقتها",
+                        recordedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+
+        // Apply habit updates
+        val existingHabits = habitDao.getHabitsForDaySync(dayKey)
+        for (habit in existingHabits) {
+            val isCompleted = habitUpdates[habit.habitKey]
+            if (isCompleted != null) {
+                habitDao.insertOrUpdate(
+                    habit.copy(
+                        isCompleted = isCompleted,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+
+        // Mark as finalized in daily_records
+        val existingRecord = dayRecordDao.getDayRecordSync(dayKey)
+        val finalizedRecord = (existingRecord ?: DayRecordEntity(dayKey = dayKey)).copy(
+            isFinalized = true,
+            finalizedAt = System.currentTimeMillis()
+        )
+        dayRecordDao.insertOrUpdate(finalizedRecord)
     }
 
     // Prayer Operations
@@ -243,4 +347,12 @@ class AppRepository(private val db: AppDatabase) {
             current.copy(isDarkMode = isDark)
         )
     }
+
+    suspend fun toggleNotifications(enabled: Boolean) {
+        val current = userSettingsDao.getSettingsSync() ?: UserSettingsEntity()
+        userSettingsDao.saveSettings(
+            current.copy(notificationsEnabled = enabled)
+        )
+    }
 }
+

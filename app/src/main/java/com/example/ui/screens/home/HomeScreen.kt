@@ -47,6 +47,7 @@ fun HomeScreen(
     var activePrayerToEdit by remember { mutableStateOf<PrayerRecordEntity?>(null) }
     var showReflectionSheet by remember { mutableStateOf(false) }
     var showQuranDialog by remember { mutableStateOf(false) }
+    var showReviewYesterdaySheet by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -70,6 +71,17 @@ fun HomeScreen(
                     fullArabicDate = uiState.fullArabicDate,
                     onSettingsClick = onNavigateToSettings
                 )
+            }
+
+            // Optional Subtle Previous Day Reminder Card
+            if (uiState.showPreviousDayBanner && uiState.previousDayReview != null) {
+                item {
+                    PreviousDayReminderCard(
+                        dateText = uiState.previousDayReview!!.dateFormattedArabic,
+                        onReviewClick = { showReviewYesterdaySheet = true },
+                        onDismiss = { viewModel.dismissPreviousDayBanner() }
+                    )
+                }
             }
 
             // 2. Day Progress Overview Card
@@ -250,6 +262,19 @@ fun HomeScreen(
                 onSave = { struggledHabit, reason, customReason, note ->
                     viewModel.saveDailyReflection(struggledHabit, reason, customReason, note)
                     showReflectionSheet = false
+                }
+            )
+        }
+
+        // Review Yesterday Sheet
+        if (showReviewYesterdaySheet && uiState.previousDayReview != null) {
+            ReviewYesterdaySheet(
+                dateFormattedArabic = uiState.previousDayReview!!.dateFormattedArabic,
+                unrecordedPrayers = uiState.previousDayReview!!.unrecordedPrayers,
+                incompleteHabits = uiState.previousDayReview!!.incompleteHabits,
+                onDismiss = { showReviewYesterdaySheet = false },
+                onConfirm = { prayerUpdates, habitUpdates ->
+                    viewModel.finalizePreviousDay(prayerUpdates, habitUpdates)
                 }
             )
         }
@@ -630,6 +655,7 @@ fun HabitCardItem(
                     "quran_wird" -> Icons.AutoMirrored.Filled.MenuBook
                     "duha_prayer" -> Icons.Default.WbSunny
                     "witr_prayer" -> Icons.Default.Star
+                    "night_prayer" -> Icons.Default.NightsStay
                     "sleep_azkar" -> Icons.Default.NightlightRound
                     else -> Icons.Default.Favorite
                 }
@@ -660,9 +686,15 @@ fun HabitCardItem(
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    if (!habit.notes.isNullOrEmpty()) {
+                    val subtitleText = when {
+                        !habit.notes.isNullOrEmpty() -> habit.notes
+                        habit.habitKey == "night_prayer" -> "3 ركعات نافلة"
+                        habit.habitKey == "witr_prayer" -> "سنة مؤكدة"
+                        else -> null
+                    }
+                    if (subtitleText != null) {
                         Text(
-                            text = habit.notes,
+                            text = subtitleText,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -678,6 +710,86 @@ fun HabitCardItem(
                 ),
                 modifier = Modifier.testTag("habit_checkbox_${habit.habitKey}")
             )
+        }
+    }
+}
+
+@Composable
+fun PreviousDayReminderCard(
+    dateText: String,
+    onReviewClick: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("previous_day_reminder_card"),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.NightlightRound,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column {
+                    Text(
+                        text = "مراجعة مهام أمس 🌙",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    Text(
+                        text = "عندك بعض مهام أمس لم تسجل حالتها بعد.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f),
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Button(
+                onClick = onReviewClick,
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                modifier = Modifier.testTag("review_yesterday_button")
+            ) {
+                Text(
+                    text = "مراجعة أمس",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondary
+                )
+            }
         }
     }
 }

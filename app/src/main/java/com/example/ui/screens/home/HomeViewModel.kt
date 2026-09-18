@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.core.datetime.EgyptDateTimeService
+import com.example.core.notification.PrayerAlarmScheduler
 import com.example.core.prayer.*
 import com.example.data.local.AppDatabase
 import com.example.data.local.entities.CounterRecordEntity
@@ -32,6 +33,8 @@ data class HomeUiState(
     val nextStepSuggestion: String = "أكمل صلواتك ووردك اليوم",
     val showCelebration: Boolean = false,
     val celebrationText: String = "ما شاء الله 🤍",
+    val previousDayReview: AppRepository.PreviousDayReviewState? = null,
+    val showPreviousDayBanner: Boolean = false,
     val isLoading: Boolean = true
 )
 
@@ -50,11 +53,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             loadTodayData()
         }
 
-        // Periodic timer for live prayer countdown update
+        // Periodic timer: updates countdown AND detects date changes (e.g. crossing midnight)
         viewModelScope.launch {
             while (true) {
-                delay(30_000) // update countdown every 30s
-                updatePrayerCountdown()
+                delay(15_000) // check every 15s
+                val currentToday = EgyptDateTimeService.getTodayKey()
+                if (currentToday != _uiState.value.dayKey && _uiState.value.dayKey.isNotEmpty()) {
+                    // Midnight has passed in Cairo timezone!
+                    loadTodayData()
+                } else {
+                    updatePrayerCountdown()
+                }
             }
         }
     }
@@ -75,6 +84,45 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             // Ensure today is initialized in database
             repository.ensureDayInitialized(todayKey, times)
 
+            // Schedule prayer & night prayer notifications
+            if (settings?.notificationsEnabled != false) {
+                try {
+                    PrayerAlarmScheduler.scheduleAllAlarms(getApplication(), lat, lng)
+                } catch (e: Exception) {
+                    // Ignore scheduling failure on unsupported runtimes
+                }
+            }
+
+            // Check if yesterday needs review
+            val yesterdayReview = repository.getPreviousDayReviewState(todayKey)
+
+            _uiState.update {
+                it.copy(
+                    previousDayReview = yesterdayReview,
+                    showPreviousDayBanner = yesterdayReview?.needsReview == true
+                )
+            }
+
+            // Define priority ordering for habits
+            val habitPriority = mapOf(
+                "quran_wird" to 1,
+                "duha_prayer" to 2,
+                "sleep_azkar" to 3,
+                "dua_daily" to 4,
+                "witr_prayer" to 5,
+                "night_prayer" to 6
+            )
+
+            // Define priority ordering for counters
+            val counterPriority = mapOf(
+                "counter_istighfar" to 1,
+                "counter_tasbih" to 2,
+                "counter_tahmid" to 3,
+                "counter_takbir" to 4,
+                "counter_salat_nabi_morning" to 5,
+                "counter_salat_nabi_evening" to 6
+            )
+
             // Combine flows for reactive updates
             combine(
                 repository.getPrayersFlow(todayKey),
@@ -82,8 +130,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 repository.getCountersFlow(todayKey),
                 repository.getReflectionFlow(todayKey)
             ) { prayers, habits, counters, reflection ->
-                val progress = calculateDayProgress(prayers, habits, counters)
-                val suggestion = determineNextStep(prayers, habits, counters)
+                val sortedHabits = habits.sortedBy { habitPriority[it.habitKey] ?: 99 }
+                val sortedCounters = counters.sortedBy { counterPriority[it.counterKey] ?: 99 }
+
+                val progress = calculateDayProgress(prayers, sortedHabits, sortedCounters)
+                val suggestion = determineNextStep(prayers, sortedHabits, sortedCounters)
                 val encouragement = getEncouragement(progress)
 
                 _uiState.update { current ->
@@ -94,8 +145,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         prayerTimes = times,
                         nextPrayerInfo = nextInfo,
                         prayers = prayers,
-                        habits = habits,
-                        counters = counters,
+                        habits = sortedHabits,
+                        counters = sortedCounters,
                         reflection = reflection,
                         dailyProgressPercent = progress,
                         encouragementMessage = encouragement,
@@ -105,6 +156,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }.collect()
         }
+    }
+
+    fun finalizePreviousDay(
+        prayerUpdates: Map<String, PrayerStatus>,
+        habitUpdates: Map<String, Boolean>
+    ) {
+        viewModelScope.launch {
+            val review = _uiState.value.previousDayReview ?: return@launch
+            repository.finalizeDay(review.dayKey, prayerUpdates, habitUpdates)
+            _uiState.update { it.copy(previousDayReview = null, showPreviousDayBanner = false) }
+            triggerCelebration("تمت مراجعة أمس 🤍", "تقبل الله طاعتك وأعانك على يومك")
+        }
+    }
+
+    fun dismissPreviousDayBanner() {
+        _uiState.update { it.copy(showPreviousDayBanner = false) }
     }
 
     private fun updatePrayerCountdown() {

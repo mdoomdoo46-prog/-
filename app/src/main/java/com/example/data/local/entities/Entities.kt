@@ -109,3 +109,15 @@ data class UserSettingsEntity(
     val lastActiveDayKey: String? = null,
     val isDarkMode: Boolean? = null
 )
+
+@Entity(
+    tableName = "daily_records"
+)
+data class DayRecordEntity(
+    @PrimaryKey
+    val dayKey: String, // format: "yyyy-MM-dd"
+    val isFinalized: Boolean = false,
+    val finalizedAt: Long? = null,
+    val createdAt: Long = System.currentTimeMillis()
+)
+

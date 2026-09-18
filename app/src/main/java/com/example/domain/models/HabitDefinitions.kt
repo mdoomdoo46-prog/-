@@ -15,6 +15,7 @@ object DefaultHabits {
     val SLEEP_AZKAR = HabitDefinition("sleep_azkar", "أذكار قبل النوم", "الأذكار", 1, "مرة", isCounter = false, iconName = "bed")
     val DUA_DAILY = HabitDefinition("dua_daily", "الدعاء مرة واحدة يوميًا", "الدعاء", 1, "مرة", isCounter = false, iconName = "hands")
     val WITR = HabitDefinition("witr_prayer", "صلاة الوتر", "السنن والرواتب", 1, "صلاة", isCounter = false, iconName = "star")
+    val NIGHT_PRAYER = HabitDefinition("night_prayer", "قيام الليل", "السنن والرواتب", 3, "ركعات", isCounter = false, iconName = "moon")
     val DUHA = HabitDefinition("duha_prayer", "صلاة الضحى", "السنن والرواتب", 1, "صلاة", isCounter = false, iconName = "sun")
 
     // Counters
@@ -29,6 +30,7 @@ object DefaultHabits {
         QURAN_WIRD,
         DUHA,
         WITR,
+        NIGHT_PRAYER,
         SLEEP_AZKAR,
         DUA_DAILY
     )

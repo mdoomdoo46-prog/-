@@ -105,3 +105,25 @@ interface UserSettingsDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveSettings(settings: UserSettingsEntity)
 }
+
+@Dao
+interface DayRecordDao {
+    @Query("SELECT * FROM daily_records WHERE dayKey = :dayKey LIMIT 1")
+    fun getDayRecordFlow(dayKey: String): Flow<DayRecordEntity?>
+
+    @Query("SELECT * FROM daily_records WHERE dayKey = :dayKey LIMIT 1")
+    suspend fun getDayRecordSync(dayKey: String): DayRecordEntity?
+
+    @Query("SELECT * FROM daily_records ORDER BY dayKey DESC")
+    fun getAllDayRecordsFlow(): Flow<List<DayRecordEntity>>
+
+    @Query("SELECT * FROM daily_records WHERE dayKey < :todayKey AND isFinalized = 0 ORDER BY dayKey DESC LIMIT 1")
+    suspend fun getLatestUnfinalizedDayBefore(todayKey: String): DayRecordEntity?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(record: DayRecordEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdate(record: DayRecordEntity)
+}
+
